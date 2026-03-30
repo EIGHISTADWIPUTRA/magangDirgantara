@@ -1,0 +1,114 @@
+description: Ultralytics aircraft model trained on /content/yolo_dataset/data.yaml
+author: Ultralytics
+date: '2026-02-11T14:16:07.218586'
+version: 8.4.12
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 224
+- 224
+names:
+  0: A10
+  1: A400M
+  2: AG600
+  3: AH64
+  4: AKINCI
+  5: AV8B
+  6: An124
+  7: An22
+  8: An225
+  9: An72
+  10: B1
+  11: B2
+  12: B21
+  13: B52
+  14: Be200
+  15: C1
+  16: C130
+  17: C17
+  18: C2
+  19: C390
+  20: C5
+  21: CH47
+  22: CH53
+  23: CL415
+  24: E2
+  25: E7
+  26: EF2000
+  27: EMB314
+  28: F117
+  29: F14
+  30: F15
+  31: F16
+  32: F18
+  33: F2
+  34: F22
+  35: F35
+  36: F4
+  37: FCK1
+  38: H6
+  39: Il76
+  40: J10
+  41: J20
+  42: J35
+  43: J36
+  44: J50
+  45: JAS39
+  46: JF17
+  47: JH7
+  48: KAAN
+  49: KC135
+  50: KF21
+  51: KJ600
+  52: Ka27
+  53: Ka52
+  54: MQ25
+  55: MQ9
+  56: Mi24
+  57: Mi26
+  58: Mi28
+  59: Mi8
+  60: Mig29
+  61: Mig31
+  62: Mirage2000
+  63: P3
+  64: RQ4
+  65: Rafale
+  66: SR71
+  67: Su24
+  68: Su25
+  69: Su34
+  70: Su47
+  71: Su57
+  72: TB001
+  73: TB2
+  74: Tejas
+  75: Tornado
+  76: Tu160
+  77: Tu22M
+  78: Tu95
+  79: U2
+  80: UH60
+  81: US2
+  82: V22
+  83: V280
+  84: Vulcan
+  85: WZ10
+  86: WZ7
+  87: WZ9
+  88: X29
+  89: X32
+  90: XB70
+  91: XQ58
+  92: Y20
+  93: YF23
+  94: Z10
+  95: Z19
+args:
+  batch: 1
+  half: true
+channels: 3
+end2end: false
