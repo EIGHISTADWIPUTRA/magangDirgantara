@@ -11,7 +11,7 @@ def init_sistem():
 		print("[V] Kamera berhasil diinisialisasi")
 		
 		print("[*] Memuat model YOLO...")
-		detektor = YoloDetektor('models/aircraft_ncnn_model')
+		detektor = YoloDetektor('/home/eighista/Documents/MAGANG/finalCode/models/yolo_ncnn_model')
 		
 		return kamera, detektor
 	except FileNotFoundError as e:
@@ -43,9 +43,10 @@ def jalankan_deteksi(kamera, detektor):
 					print("[x] Tidak ada kamera yang terdeteksi")
 					break
 				
-				#hasil = detektor.prediksi(frame)
-				#hasil = list(hasil)
+				hasil = detektor.prediksi(frame)
+				hasil = list(hasil)
 				
+				frame = detektor.bounding_box(frame, hasil)
 				frame = detektor.fps(frame)
 				
 				cv2.imshow("Stream", frame)
