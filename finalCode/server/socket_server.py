@@ -24,6 +24,7 @@ or:
 from __future__ import annotations
 
 import base64
+import json
 import os
 from datetime import datetime
 from typing import Any, Dict, Tuple
@@ -43,6 +44,7 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "gif"}
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SAVE_DIR = os.path.join(BASE_DIR, "received_images")
+LATEST_TARGET_STATE_FILE = os.path.join(SAVE_DIR, "latest_target.json")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 app = Flask(__name__)
@@ -64,16 +66,35 @@ def _normalize_filename(filename: str | None) -> str:
     return safe_name
 
 
-def _decode_image_payload(data: Dict[str, Any]) -> Tuple[bytes, str]:
+def _normalize_class_name(class_name: Any) -> str:
+    if not isinstance(class_name, str):
+        return "unknown"
+
+    clean_name = secure_filename(class_name.strip()).lower()
+    return clean_name or "unknown"
+
+
+def _write_latest_target_state(state: Dict[str, Any]) -> None:
+    temp_path = f"{LATEST_TARGET_STATE_FILE}.tmp"
+    with open(temp_path, "w", encoding="utf-8") as state_file:
+        json.dump(state, state_file, indent=2, ensure_ascii=False)
+    os.replace(temp_path, LATEST_TARGET_STATE_FILE)
+
+
+def _decode_image_payload(data: Dict[str, Any]) -> Tuple[bytes, str, str]:
     """
-    Decode payload into raw image bytes and normalized filename.
+    Decode payload into raw image bytes, normalized filename, and class name.
 
     Supported payload formats:
-    1. {"filename": "a.jpg", "image_base64": "..."}
-    2. {"filename": "a.jpg", "image_base64": "data:image/jpeg;base64,..."}
-    3. {"filename": "a.jpg", "image_bytes": <bytes|bytearray|list[int]>}
+    1. {"filename": "a.jpg", "class_name": "person", "image_base64": "..."}
+    2. {"filename": "a.jpg", "class_name": "person", "image_base64": "data:image/jpeg;base64,..."}
+    3. {"filename": "a.jpg", "class_name": "person", "image_bytes": <bytes|bytearray|list[int]>}
     """
     filename = _normalize_filename(data.get("filename"))
+    class_name_raw = data.get("class_name")
+    if class_name_raw is None:
+        class_name_raw = data.get("target_class")
+    class_name = _normalize_class_name(class_name_raw)
 
     if "image_base64" in data:
         encoded = data.get("image_base64")
@@ -90,7 +111,7 @@ def _decode_image_payload(data: Dict[str, Any]) -> Tuple[bytes, str]:
 
         if not image_bytes:
             raise ValueError("Decoded image is empty")
-        return image_bytes, filename
+        return image_bytes, filename, class_name
 
     if "image_bytes" in data:
         raw = data.get("image_bytes")
@@ -103,7 +124,7 @@ def _decode_image_payload(data: Dict[str, Any]) -> Tuple[bytes, str]:
 
         if not image_bytes:
             raise ValueError("Image bytes are empty")
-        return image_bytes, filename
+        return image_bytes, filename, class_name
 
     raise ValueError("Payload must contain 'image_base64' or 'image_bytes'")
 
@@ -146,18 +167,33 @@ def on_upload_image(payload: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(payload, dict):
             raise ValueError("Payload must be a JSON object")
 
-        image_bytes, filename = _decode_image_payload(payload)
+        image_bytes, filename, class_name = _decode_image_payload(payload)
         save_path = os.path.join(SAVE_DIR, filename)
+        target_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        received_at = datetime.now().isoformat(timespec="seconds")
 
         with open(save_path, "wb") as image_file:
             image_file.write(image_bytes)
 
-        print(f"[INFO] Image saved: {save_path}")
+        latest_state = {
+            "target_id": target_id,
+            "class_name": class_name,
+            "filename": filename,
+            "path": save_path,
+            "received_at": received_at,
+            "size_bytes": len(image_bytes),
+        }
+        _write_latest_target_state(latest_state)
+
+        print(f"[INFO] Image saved: {save_path} (class={class_name})")
         return {
             "ok": True,
             "message": "Image received",
+            "target_id": target_id,
+            "class_name": class_name,
             "filename": filename,
             "path": save_path,
+            "received_at": received_at,
         }
     except Exception as exc:
         return {"ok": False, "message": str(exc)}

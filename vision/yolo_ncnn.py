@@ -2,7 +2,7 @@ from ultralytics import YOLO
 
 # 1. Tentukan nama model yang ingin di-download
 # 'yolov8n.pt' adalah versi Nano (paling ringan & cepat untuk Raspberry Pi)
-model_name = '/home/eighista/Documents/MAGANG/finalCode/models/yolo.pt'
+model_name = '/home/eighista/Documents/MAGANG/models/model_yolo/yolo11n.pt'
 
 print(f"Sedang mengunduh model {model_name}...")
 model = YOLO(model_name)
