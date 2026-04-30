@@ -8,28 +8,34 @@ Program GUI health check telah dibuat. Dokumen ini menjelaskan cara setup dan au
 
 ### 1. **Install Library yang Diperlukan**
 
-Jalankan perintah berikut di terminal Raspberry Pi:
+Jalankan dari root repo (RECOMMENDED):
+
+```bash
+cd ~/Documents/MAGANG
+bash scripts/setup_env.sh
+source .venv/bin/activate
+```
+
+Jika ingin manual:
 
 ```bash
 # Update package manager
 sudo apt update && sudo apt upgrade -y
 
 # Install Python3 dan dependency
-sudo apt install -y python3-pip python3-tk python3-dev
+sudo apt install -y python3-venv python3-pip python3-tk python3-dev build-essential i2c-tools
 
 # Install library yang diperlukan
-pip3 install opencv-python
-pip3 install RPi.GPIO
-pip3 install SX127x
-pip3 install psutil
-pip3 install ultralytics
+pip3 install opencv-python ultralytics psutil pillow flask flask_socketio python-dotenv pyserial lsm303d
+pip3 install adafruit-blinka adafruit-circuitpython-bmp280 adafruit-circuitpython-mpu6050
+pip3 install RPi.GPIO spidev
 
-# Untuk sensor WiFi check (jika belum ada)
-sudo apt install -y wireless-tools
-
-# Untuk GPS (jika menggunakan GPSM6N)
-pip3 install pynmea2 pyserial
+# Install driver SX127x dari repo
+cd ~/Documents/MAGANG
+pip3 install -e ./pySX127x
 ```
+
+Aktifkan I2C dan SPI (raspi-config) bila memakai sensor atau LoRa.
 
 ### 2. **Verifikasi Instalasi**
 
@@ -40,11 +46,12 @@ python3 --version
 # Cek tkinter
 python3 -m tkinter
 
-# Jika window tkinter muncul → ✓ OK
+# Jika window tkinter muncul -> OK
 
 # Cek library lainnya
-python3 -c "import cv2; print('OpenCV OK')"
-python3 -c "import RPi.GPIO; print('GPIO OK')"
+python3 -c "import cv2, psutil; from PIL import Image; print('Core OK')"
+python3 -c "import RPi.GPIO, spidev; print('GPIO/SPI OK')"
+python3 -c "import SX127x; print('SX127x OK')"
 ```
 
 ---
@@ -54,23 +61,23 @@ python3 -c "import RPi.GPIO; print('GPIO OK')"
 ### **Cara 1: Langsung dari Terminal**
 
 ```bash
-# Jika menggunakan venv, aktifkan terlebih dahulu
-source /path/to/venv/bin/activate
+# Aktifkan venv
+source /home/eighista/Documents/MAGANG/.venv/bin/activate
 
-# Navigate ke project folder
-cd ~/Documents/MAGANG/finalCode
+# Navigate ke project folder (root repo)
+cd /home/eighista/Documents/MAGANG
 
 # Run program
-python3 health_check_gui.py
+python3 finalCode/health_check_gui.py
 
 # Atau menggunakan module runner
 python3 -m finalCode.health_check_gui
 ```
 
 > Panel YOLO di GUI menggunakan model di path:
-> `/home/eighista/Documents/MAGANG/finalCode/models/yolo.pt`
+> `/home/eighista/Documents/MAGANG/finalCode/models/yolo_ncnn_model`
 >
-> Class yang diproses hanya: `1, 2, 3`.
+> Jika path repo berbeda, ubah `YOLO_MODEL_PATH` di file `health_check_gui.py`.
 
 ### **Cara 2: Membuat Desktop Shortcut**
 
@@ -87,7 +94,8 @@ Isi dengan:
 Type=Application
 Name=Health Check
 Comment=System Health Check GUI
-Exec=python3 /home/pi/Documents/MAGANG/finalCode/health_check_gui.py
+Exec=/home/eighista/Documents/MAGANG/.venv/bin/python /home/eighista/Documents/MAGANG/finalCode/health_check_gui.py
+Path=/home/eighista/Documents/MAGANG
 Icon=system-run
 Terminal=false
 Categories=Utility;
@@ -122,10 +130,11 @@ Wants=graphical.target
 [Service]
 Type=simple
 User=eighista
+WorkingDirectory=/home/eighista/Documents/MAGANG
 Environment="DISPLAY=:0"
 Environment="XAUTHORITY=/home/eighista/.Xauthority"
 Environment="PYTHONPATH=/home/eighista/Documents/MAGANG"
-ExecStart=/home/eighista/Documents/MAGANG/rudal/bin/python3 /home/eighista/Documents/MAGANG/finalCode/health_check_gui.py
+ExecStart=/home/eighista/Documents/MAGANG/.venv/bin/python /home/eighista/Documents/MAGANG/finalCode/health_check_gui.py
 Restart=on-failure
 RestartSec=10s
 
@@ -135,7 +144,7 @@ WantedBy=graphical.target
 
 > 💡 **PENTING:**
 > - `User=eighista` → Ganti dengan username Anda (harus cocok dengan venv owner)
-> - `/home/eighista/Documents/MAGANG/rudal` → Path ke venv Anda (BUKAN global python `/usr/bin/python3`)
+> - `/home/eighista/Documents/MAGANG/.venv` → Path ke venv Anda (BUKAN global python `/usr/bin/python3`)
 > - `PYTHONPATH=/home/eighista/Documents/MAGANG` → Path root project (agar module import bekerja)
 > - `/home/eighista/Documents/MAGANG/finalCode` → Path ke project folder Anda
 
@@ -172,7 +181,7 @@ sudo reboot
 sudo crontab -e
 
 # Tambahkan baris ini di akhir:
-@reboot sleep 10 && export DISPLAY=:0 && /usr/bin/python3 /home/pi/Documents/MAGANG/finalCode/health_check_gui.py &
+@reboot sleep 10 && export DISPLAY=:0 && /home/eighista/Documents/MAGANG/.venv/bin/python /home/eighista/Documents/MAGANG/finalCode/health_check_gui.py &
 ```
 
 ---
@@ -188,7 +197,7 @@ Tambahkan sebelum `exit 0`:
 
 ```bash
 # Start Health Check GUI
-su - pi -c "export DISPLAY=:0 && python3 /home/pi/Documents/MAGANG/finalCode/health_check_gui.py &" &
+su - eighista -c "export DISPLAY=:0 && /home/eighista/Documents/MAGANG/.venv/bin/python /home/eighista/Documents/MAGANG/finalCode/health_check_gui.py &" &
 ```
 
 ---
@@ -211,7 +220,7 @@ su - pi -c "export DISPLAY=:0 && python3 /home/pi/Documents/MAGANG/finalCode/hea
 
 3. **Test manual dengan DISPLAY:**
    ```bash
-   DISPLAY=:0 python3 health_check_gui.py
+   DISPLAY=:0 /home/eighista/Documents/MAGANG/.venv/bin/python /home/eighista/Documents/MAGANG/finalCode/health_check_gui.py
    ```
 
 ### **Error: "No module named 'tkinter'"**
@@ -253,8 +262,6 @@ GUI memerlukan display server. Pastikan:
 │ 🧭 MPU6050            ● OK          │
 │ 🌡️  BMP280             ● ERROR       │
 │ 💡 GY511              ● WARNING     │
-│ 🗺️  GPSM6N             ● PENDING     │
-│ 📶 WiFi Connection    ● OK          │
 │ 🔋 Power Supply       ● OK          │
 │                                     │
 ├─────────────────────────────────────┤
@@ -302,7 +309,7 @@ self.check_custom_sensor()
 
 ## ✅ Checklist Setup
 
-- [ ] Install semua library (`pip3 install ...`)
+- [ ] Install semua library (pakai `scripts/setup_env.sh` atau manual)
 - [ ] Test jalankan program di terminal
 - [ ] Pilih method autostart (Opsi 1/2/3)
 - [ ] Setup service/crontab/rc.local
