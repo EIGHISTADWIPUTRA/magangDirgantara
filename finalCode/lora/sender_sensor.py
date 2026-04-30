@@ -230,10 +230,10 @@ class LoRaSensorSender:
 
             timestamp = int(time.time())
             return (
-                f"TS:{timestamp} "
-                f"P:{mpu_orientasi['pitch']} R:{mpu_orientasi['roll']} "
-                f"Y:{gy_orientasi['heading']} "
-                f"T:{bmp_data['tekanan']}hPa K:{bmp_data['ketinggian']}m"
+                f"waktu_kirim:{timestamp} "
+                f"pitch:{mpu_orientasi['pitch']} roll:{mpu_orientasi['roll']} "
+                f"yaw:{gy_orientasi['heading']} "
+                f"tekanan:{bmp_data['tekanan']}hPa ketinggian:{bmp_data['ketinggian']}m"
             )
 
         if self.sensors == 'sikap_gps':
@@ -244,34 +244,44 @@ class LoRaSensorSender:
             gps_data = data.get('gpsm6n', {})
             if isinstance(gps_override, dict):
                 gps_data = {
-                    "latitude": gps_override.get('latitude'),
-                    "longitude": gps_override.get('longitude'),
-                    "satellites": gps_override.get('satellites', 0),
-                    "status": gps_override.get('status', 'OVERRIDE'),
+                    "lintang": gps_override.get('latitude'),
+                    "bujur": gps_override.get('longitude'),
                     "iterasi": gps_override.get('iterasi'),
-                    "finish": gps_override.get('finish'),
-                    "mission_status": gps_override.get('mission_status', 'Meluncur'),
-                    "found": gps_override.get('found', False),
+                    "selesai": gps_override.get('finish'),
+                    "misi_status": gps_override.get('mission_status', 'Meluncur'),
+                    "ditemukan": gps_override.get('found', False),
+                    "id_misi": gps_override.get('id_misi', ''),
+                }
+            else:
+                # Normalisasi field dari hardware GPS ke format misi baru
+                gps_data = {
+                    "lintang": gps_data.get('latitude'),
+                    "bujur": gps_data.get('longitude'),
+                    "iterasi": gps_data.get('iterasi'),
+                    "selesai": gps_data.get('finish'),
+                    "misi_status": gps_data.get('mission_status', 'Launch'),
+                    "ditemukan": gps_data.get('found', False),
+                    "id_misi": gps_data.get('id_misi', ''),
                 }
 
             timestamp = int(time.time())
             iterasi = gps_data.get('iterasi')
-            finish = gps_data.get('finish')
-            mission_status = gps_data.get('mission_status', 'Launch')
-            found = bool(gps_data.get('found', False))
+            selesai = gps_data.get('selesai')
+            misi_status = gps_data.get('misi_status', 'Launch')
+            ditemukan = bool(gps_data.get('ditemukan', False))
 
             prefix = ""
-            if iterasi is not None and finish is not None:
-                prefix = f"I:{iterasi} F:{finish} "
+            if iterasi is not None and selesai is not None:
+                prefix = f"iterasi:{iterasi} selesai:{selesai} "
 
             return (
-                f"{prefix}TS:{timestamp} "
-                f"P:{mpu_orientasi['pitch']} R:{mpu_orientasi['roll']} "
-                f"Y:{gy_orientasi['heading']} "
-                f"T:{bmp_data['tekanan']}hPa K:{bmp_data['ketinggian']}m "
-                f"LAT:{gps_data.get('latitude')} LON:{gps_data.get('longitude')} "
-                f"SAT:{gps_data.get('satellites', 0)} FIX:{gps_data.get('status')} "
-                f"Status: {mission_status}, Found: {found}"
+                f"{prefix}waktu_kirim:{timestamp} "
+                f"pitch:{mpu_orientasi['pitch']} roll:{mpu_orientasi['roll']} "
+                f"yaw:{gy_orientasi['heading']} "
+                f"tekanan:{bmp_data['tekanan']}hPa ketinggian:{bmp_data['ketinggian']}m "
+                f"lintang:{gps_data.get('lintang')} bujur:{gps_data.get('bujur')} "
+                f"misi_status:{misi_status} ditemukan:{ditemukan} "
+                f"id_misi:{gps_data.get('id_misi', '')}"
             )
 
         parts = [f"#{counter}"]

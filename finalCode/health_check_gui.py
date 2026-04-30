@@ -43,7 +43,7 @@ MISSION_IMAGE_DIR = "/home/eighista/Documents/MAGANG/finalCode/server/misi/gamba
 MISSION_ROUTE_DIR = "/home/eighista/Documents/MAGANG/finalCode/server/misi/jalur"
 TARGET_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")
 MISSION_IDLE_POLL_SECONDS = 0.05
-MISSION_ROUTE_POINTS = 25
+MISSION_ROUTE_POINTS = 50
 MISSION_ROUTE_TAIL_POINTS = 5
 MISSION_ROUTE_STEP_SECONDS = 1.0
 MISSION_CANVAS_MAX_FPS = 10.0
@@ -174,6 +174,9 @@ class HealthCheckGUI:
 
         # Fix #6 – event-based clean stop for mission thread
         self._mission_stop_event = threading.Event()
+
+        # Suppress noisy tags from LoRa log panels.
+        self._lora_log_hidden_tags = {"INFO", "DONE", "ENQUEUE"}
 
         # Health check state machine (UI-thread safe via after scheduler)
         self.health_check_steps = []
@@ -335,8 +338,6 @@ class HealthCheckGUI:
             ('🧭 MPU6050 (Accelerometer)', 'mpu6050'),
             ('🌡️  BMP280 (Pressure)', 'bmp280'),
             ('💡 GY511 (Compass)', 'gy511'),
-            ('🗺️  GPSM6N (GPS)', 'gpsm6n'),
-            ('📶 WiFi Connection', 'wifi'),
             ('🔋 Power Supply', 'power'),
         ]
         
@@ -371,7 +372,7 @@ class HealthCheckGUI:
             status_attr="lora_status_label",
             status_initial="LoRa: Stopped",
             log_attr="lora_log",
-            initial_log_text="[INFO] LoRa sender siap. Klik Start LoRa untuk kirim data sikap.\n",
+            initial_log_text="LoRa sender siap. Klik Start LoRa untuk kirim data sikap.\n",
             command_text="Skenario: python -m finalCode.main lora send sikap",
             include_controls=True,
             start_btn_attr="lora_start_btn",
@@ -921,7 +922,7 @@ class HealthCheckGUI:
             status_attr="mission_lora_status_label",
             status_initial="LoRa: idle",
             log_attr="mission_lora_log",
-            initial_log_text="[INFO] Waiting Misi siap. Klik Start Waiting.\n",
+            initial_log_text="Waiting Misi siap. Klik Start Waiting.\n",
             include_controls=True,
             start_btn_attr="mission_reset_btn",
             start_command=self.reset_waiting_mission,
@@ -1085,9 +1086,19 @@ class HealthCheckGUI:
         """Reset countdown indicator text."""
         self.update_mission_countdown("-", "#ffcc00")
 
+    def _should_hide_lora_log_line(self, text):
+        """Return True when a LoRa log line should be hidden from panel output."""
+        message = str(text or "").lstrip()
+        match = re.match(r"^\[([A-Z]+)\]", message)
+        if not match:
+            return False
+        return match.group(1) in self._lora_log_hidden_tags
+
     def append_mission_log(self, text):
         """Append one mission log line safely."""
         if not hasattr(self, "mission_lora_log"):
+            return
+        if self._should_hide_lora_log_line(text):
             return
         self.mission_lora_log.config(state=tk.NORMAL)
         self.mission_lora_log.insert(tk.END, text + "\n")
@@ -1100,7 +1111,7 @@ class HealthCheckGUI:
             return
         self.mission_lora_log.config(state=tk.NORMAL)
         self.mission_lora_log.delete("1.0", tk.END)
-        self.mission_lora_log.insert(tk.END, "[INFO] Log dibersihkan.\n")
+        self.mission_lora_log.insert(tk.END, "Log dibersihkan.\n")
         self.mission_lora_log.config(state=tk.DISABLED)
 
     def reset_waiting_mission(self):
@@ -1512,28 +1523,30 @@ class HealthCheckGUI:
             )
             return None
 
+        # Format misi baru: lintang_sasaran / bujur_sasaran
         try:
-            target_lon = float(mission_detail.get("longitude_target"))
-            target_lat = float(mission_detail.get("lattitude_target"))
+            target_lat = float(mission_detail.get("lintang_sasaran"))
+            target_lon = float(mission_detail.get("bujur_sasaran"))
         except Exception:
             self._log_mission_warning_once(
                 f"{detail_path}:coordinate",
-                f"[WARN] Mission {mission_file} tidak valid: longitude_target/lattitude_target harus numerik",
+                f"[WARN] Mission {mission_file} tidak valid: lintang_sasaran/bujur_sasaran harus numerik",
             )
             return None
 
-        finish_points = MISSION_ROUTE_POINTS
-        finish_raw = mission_detail.get("finish", MISSION_ROUTE_POINTS)
+        # Koordinat awal dari file misi (opsional, fallback ke input UI)
+        start_lat_file = None
+        start_lon_file = None
         try:
-            finish_points = int(finish_raw)
-            if finish_points < 2:
-                raise ValueError("finish harus >= 2")
+            raw_lat_awal = mission_detail.get("lintang_awal")
+            raw_lon_awal = mission_detail.get("bujur_awal")
+            if raw_lat_awal is not None and raw_lon_awal is not None:
+                start_lat_file = float(raw_lat_awal)
+                start_lon_file = float(raw_lon_awal)
         except Exception:
-            self._log_mission_warning_once(
-                f"{detail_path}:finish",
-                f"[WARN] finish pada {mission_file} tidak valid, fallback ke {MISSION_ROUTE_POINTS}",
-            )
-            finish_points = MISSION_ROUTE_POINTS
+            pass  # Jika tidak ada / tidak valid, gunakan koordinat dari input UI
+
+        finish_points = MISSION_ROUTE_POINTS
 
         image_name = os.path.basename(nama_gambar)
         image_path = os.path.join(self.mission_image_dir, image_name)
@@ -1545,7 +1558,9 @@ class HealthCheckGUI:
             return None
 
         class_name = self._normalize_target_class_name(kelas_raw)
-        mission_id = f"{mission_file}:{detail_mtime_ns}"
+        # Gunakan id_misi dari file jika ada, fallback ke nama file + mtime
+        id_misi = str(mission_detail.get("id_misi", "")).strip()
+        mission_id = id_misi if id_misi else f"{mission_file}:{detail_mtime_ns}"
         self.mission_last_invalid_detail = None
         return {
             "target_id": mission_id,
@@ -1554,6 +1569,8 @@ class HealthCheckGUI:
             "mission_file": mission_file,
             "target_lat": target_lat,
             "target_lon": target_lon,
+            "start_lat_file": start_lat_file,
+            "start_lon_file": start_lon_file,
             "finish_points": finish_points,
             "path": image_path,
         }
@@ -1867,6 +1884,7 @@ class HealthCheckGUI:
 
         gps_override = None
         if isinstance(route_point, dict):
+            id_misi_val = str((self.mission_target or {}).get("target_id", "")).strip()
             gps_override = {
                 "latitude": route_point.get("latitude"),
                 "longitude": route_point.get("longitude"),
@@ -1876,6 +1894,7 @@ class HealthCheckGUI:
                 "finish": int(finish_value),
                 "mission_status": str(mission_status),  # 'Launch' or 'Selesai'
                 "found": bool(found_value),              # live YOLO detection
+                "id_misi": id_misi_val,
             }
 
         try:
@@ -1892,14 +1911,14 @@ class HealthCheckGUI:
             self._increment_mission_lora_debug_counter("enqueued")
             if isinstance(gps_override, dict):
                 iterasi = gps_override.get("iterasi")
-                finish = gps_override.get("finish")
-                lat_val = gps_override.get("latitude")
-                lon_val = gps_override.get("longitude")
-                status_val = gps_override.get("mission_status")
-                found_val = gps_override.get("found")
+                selesai = gps_override.get("finish")
+                lintang_val = gps_override.get("latitude")
+                bujur_val = gps_override.get("longitude")
+                misi_status_val = gps_override.get("mission_status")
+                ditemukan_val = gps_override.get("found")
                 self._safe_after(
-                    lambda c=counter_value, i=iterasi, f=finish, lat=lat_val, lon=lon_val, st=status_val, fd=found_val: self.append_mission_log(
-                        f"[ENQUEUE] SIKAP_GPS #{c} | I:{i} F:{f} LAT:{lat} LON:{lon} Status:{st} Found:{fd}"
+                    lambda c=counter_value, i=iterasi, f=selesai, lat=lintang_val, lon=bujur_val, st=misi_status_val, fd=ditemukan_val: self.append_mission_log(
+                        f"[ENQUEUE] SIKAP_GPS #{c} | iterasi:{i} selesai:{f} lintang:{lat} bujur:{lon} misi_status:{st} ditemukan:{fd}"
                     )
                 )
             else:
@@ -1929,8 +1948,8 @@ class HealthCheckGUI:
         found_value = bool(getattr(self, "mission_last_found", False))
         tail_hit_value = bool(self.mission_tail_hit)
         message = (
-            f"I:{iter_value} F:{finish_value} TS:{timestamp_value} TARGET:{target_class} "
-            f"Status: Selesai, Found: {found_value}, TailHit: {tail_hit_value}"
+            f"iterasi:{iter_value} selesai:{finish_value} waktu_kirim:{timestamp_value} target:{target_class} "
+            f"misi_status:Selesai ditemukan:{found_value} ekor_hit:{tail_hit_value}"
         )
         for attempt in range(1, 4):
             if not self._ensure_mission_lora_sender():
@@ -2160,17 +2179,25 @@ class HealthCheckGUI:
                     new_target_id = latest_target.get("target_id")
                     if new_target_id and new_target_id != self.mission_last_target_id:
                         finish_points = int(latest_target.get("finish_points") or MISSION_ROUTE_POINTS)
+
+                        # Gunakan koordinat awal dari file misi jika tersedia,
+                        # jika tidak fallback ke koordinat dari input UI.
+                        start_lat_file = latest_target.get("start_lat_file")
+                        start_lon_file = latest_target.get("start_lon_file")
+                        effective_start_lat = start_lat_file if start_lat_file is not None else self.mission_start_lat
+                        effective_start_lon = start_lon_file if start_lon_file is not None else self.mission_start_lon
+
                         route_points = self._build_route_points(
-                            self.mission_start_lat,
-                            self.mission_start_lon,
+                            effective_start_lat,
+                            effective_start_lon,
                             float(latest_target.get("target_lat")),
                             float(latest_target.get("target_lon")),
                             finish_points,
                         )
 
                         target_data = dict(latest_target)
-                        target_data["start_lat"] = self.mission_start_lat
-                        target_data["start_lon"] = self.mission_start_lon
+                        target_data["start_lat"] = effective_start_lat
+                        target_data["start_lon"] = effective_start_lon
                         target_data["route_points"] = route_points
                         route_path = self._save_route_json(target_data, route_points)
                         target_data["route_file"] = route_path
@@ -2202,6 +2229,14 @@ class HealthCheckGUI:
 
                         self._clear_mission_lora_queue()
                         self._release_mission_lora_sender()
+                        # Eager reinit: pastikan sender sudah siap sebelum route step pertama
+                        # sehingga worker tidak menemukan sender_ref = None saat misi baru.
+                        if not self._ensure_mission_lora_sender():
+                            self._safe_after(
+                                lambda: self.append_mission_log(
+                                    "[WARN] LoRa sender reinit gagal saat target baru, akan retry saat kirim."
+                                )
+                            )
                         self._safe_after(lambda data=target_data: self._handle_new_mission_target(data))
                         self._safe_after(
                             lambda total=len(route_points): self.mission_route_label.config(
@@ -2426,6 +2461,8 @@ class HealthCheckGUI:
 
     def append_lora_log(self, text):
         """Append one line to LoRa log box safely."""
+        if self._should_hide_lora_log_line(text):
+            return
         self.lora_log.config(state=tk.NORMAL)
         self.lora_log.insert(tk.END, text + "\n")
         self.lora_log.see(tk.END)
@@ -2437,7 +2474,7 @@ class HealthCheckGUI:
             return
         self.lora_log.config(state=tk.NORMAL)
         self.lora_log.delete("1.0", tk.END)
-        self.lora_log.insert(tk.END, "[INFO] Log dibersihkan.\n")
+        self.lora_log.insert(tk.END, "Log dibersihkan.\n")
         self.lora_log.config(state=tk.DISABLED)
 
     def _load_yolo_model(self):
@@ -2808,8 +2845,6 @@ class HealthCheckGUI:
             ("Checking MPU6050...", self.check_mpu6050),
             ("Checking BMP280...", self.check_bmp280),
             ("Checking GY511...", self.check_gy511),
-            ("Checking GPSM6N...", self.check_gpsm6n),
-            ("Checking WiFi...", self.check_wifi),
             ("Checking power supply...", self.check_power),
         ]
         self.health_check_step_index = 0
